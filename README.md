@@ -3,20 +3,8 @@
 下面的示例展示了如何在 Android 上获取电池电量、当前容量和预估满电容量(当前容量/当前百分比)，并在 Compose 中显示：
 
 ```kotlin
-import android.content.Context
-import android.os.BatteryManager
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-
 @Composable
-fun BatteryInfoView(context: Context) {
+fun batteryInfoView(context: Context) {
     val batteryInfo = getBatteryInfo(context)
 
     Text(

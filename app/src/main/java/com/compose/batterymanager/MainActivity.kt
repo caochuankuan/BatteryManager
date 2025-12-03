@@ -1,5 +1,6 @@
 package com.compose.batterymanager
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -210,6 +211,7 @@ data class BatteryParameter(
     val description: String
 )
 
+@SuppressLint("PrivateApi", "DefaultLocale")
 fun getBatteryParameters(context: Context): List<BatteryParameter> {
     val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
     val batteryStatus = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -217,6 +219,25 @@ fun getBatteryParameters(context: Context): List<BatteryParameter> {
     val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
     val percentage = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+
+    // 获取当前电量（微安时）并转换为毫安时
+    val chargeCounter = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+    val mAh = chargeCounter / 1000
+
+    // 计算预估实际容量：当前毫安时 / 百分比 * 100
+    val percentageTemp = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    val totalCapacity = if (percentageTemp > 0) (mAh * 100) / percentageTemp else 0
+
+    // 获取电池容量（毫安时）
+    val batteryCapacity: Double = try {
+        val clazz = Class.forName("com.android.internal.os.PowerProfile")
+        val instance = clazz.getConstructor(Context::class.java).newInstance(context)
+        clazz.getMethod("getBatteryCapacity").invoke(instance) as Double
+    } catch (e: Exception) {
+        e.printStackTrace()
+        0.0
+    }
+
     
     return listOf(
         BatteryParameter(
@@ -232,6 +253,35 @@ fun getBatteryParameters(context: Context): List<BatteryParameter> {
                 "电池充电循环次数 (需要 Android 14 或更高版本)"
             }
         ),
+        BatteryParameter("当前容量", "$mAh mAh", "当前电池毫安时"),
+        BatteryParameter("设计容量", "$batteryCapacity mAh", "电池设计容量（毫安时）"),
+        BatteryParameter("预估满电容量", "$totalCapacity mAh", "预估电池满电容量\n（当前容量/当前百分比）"),
+        BatteryParameter("预估健康度", "${String.format("%.2f", totalCapacity / batteryCapacity * 100)}%", "预估电池健康度\n（当前容量/电池容量*100%）"),
+        BatteryParameter("电池电量等级",
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                batteryStatus?.getStringExtra(BatteryManager.EXTRA_CAPACITY_LEVEL) ?: "未知"
+            } else {
+                "需要 API 36+"
+            },
+            "当前电池电量等级"),
+
+
+        BatteryParameter(
+            "剩余充电时间",
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {   // API 28+
+                val remaining = batteryManager.computeChargeTimeRemaining()
+                if (remaining > 0) {
+                    val minutes = remaining / 1000 / 60
+                    "$minutes min"
+                } else {
+                    "Not available"
+                }
+            } else {
+                "需要 API 28+"
+            },
+            "电池剩余充电时间（毫秒）"
+        ),
+
         BatteryParameter("电池电量", "$percentage%", "当前电池电量百分比"),
         BatteryParameter("电量等级", "$level", "当前电池电量等级"),
         BatteryParameter("电量刻度", "$scale", "电池电量最大刻度"),
@@ -243,10 +293,10 @@ fun getBatteryParameters(context: Context): List<BatteryParameter> {
         BatteryParameter("电池技术", batteryStatus?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "未知", "电池技术类型"),
         BatteryParameter("电池存在", if (batteryStatus?.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false) == true) "是" else "否", "电池是否存在"),
         BatteryParameter("设计容量", "${batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)}%", "电池设计容量百分比"),
-        BatteryParameter("充电计数器", "${batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)} μAh", "电池充电计数器（微安时）"),
-        BatteryParameter("瞬时电流", "${batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)} μA", "瞬时电池电流（微安）"),
+        BatteryParameter("充电计数器", "${String.format("%.2f", batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) / 1000.0)} mAh", "电池充电计数器（毫安时）"),
+        BatteryParameter("瞬时电流", "${String.format("%.2f", batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) / 1000.0)} mA", "瞬时电池电流（毫安）"),
         BatteryParameter("平均电流", "${batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)} μA", "平均电池电流（微安）"),
-        BatteryParameter("能量计数器", "${batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER)} nWh", "电池能量计数器（纳瓦时）")
+        BatteryParameter("能量计数器", "${String.format("%.2f", batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER) / 10000000000000000000.0)} Wh", "电池能量计数器（纳瓦时）")
     )
 }
 
